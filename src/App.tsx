@@ -1,15 +1,26 @@
 import React, { useEffect } from 'react';
-import { produce } from 'immer';
 import moment from 'moment';
+import { useHotkeys } from 'react-hotkeys-hook';
 import useInterval from '@use-it/interval';
 import { debounce } from 'throttle-debounce';
 import { ContentState, EditorState, convertToRaw } from 'draft-js';
 import * as pako from 'pako';
+// import * as Automerge from 'automerge';
+import { produce } from 'immer';
 
 import { Block, BlockEditor } from './BlockEditor';
+import { randomEmoji } from './randomEmoji';
 
-import './App.css';
+import './reset.css';
 
+import classNames from 'classnames/bind';
+import style from './App.module.css';
+const cx = classNames.bind(style);
+
+/*
+ *const pack = Automerge.save;
+ *const unpack = Automerge.load;
+ */
 const pack = JSON.stringify;
 const unpack = JSON.parse;
 
@@ -18,18 +29,17 @@ type State = {
     blockOrder: string[];
 };
 
-const newBlock = (key: string, creator: string = 'me') => ({
+const newBlock = (key: string, title: string, creator: string = 'me') => ({
     key,
+    title,
     creator,
     createdAt: new Date().valueOf(),
     contentState: convertToRaw(EditorState.createEmpty().getCurrentContent()),
 });
 
 const initialState: State = {
-    blocks: {
-        '👋': newBlock('👋'),
-    },
-    blockOrder: ['👋'],
+    blocks: {},
+    blockOrder: [],
 };
 
 const serialize = (state: State): string => new Buffer(pako.deflate(pack(state))).toString('base64');
@@ -42,6 +52,7 @@ const deserialize = (compressedState: string): State => {
             })
         ) as State;
     } catch (e) {
+        // return Automerge.from(initialState);
         return initialState;
     }
 };
@@ -65,48 +76,53 @@ const makeUniqueKey = (newName: string, existingNames: string[]) => {
     }
 };
 
-const App: React.FC = React.memo(() => {
-    const [state, setState] = React.useState(deserialize(window.location.hash));
+const initialHashState = deserialize(window.location.hash);
+
+const App: React.FC = () => {
+    const [state, setState] = React.useState(initialHashState);
+    const [focusIdx, setFocusIdx] = React.useState(0);
 
     const finalizeState = (producerFn: (draft: State) => void) => {
-        const newState = produce(state, producerFn);
-        setState(newState);
-        window.location.hash = serialize(newState);
+        //   setState((state) => Automerge.change(state, producerFn));
+        setState((state) => produce(state, producerFn));
     };
 
-    const debouncedOnUpdateBlock = debounce(500, false, (block: Block, newContentState: ContentState) => {
+    const onUpdateBlock = (block: Block, newContentState?: ContentState, newTitle?: string) => {
         finalizeState((draft) => {
-            draft.blocks[block.key].contentState = convertToRaw(newContentState);
+            if (newContentState !== undefined) {
+                draft.blocks[block.key].contentState = convertToRaw(newContentState);
+            }
+            if (newTitle !== undefined) {
+                draft.blocks[block.key].title = newTitle;
+            }
         });
-    });
-
-    const onUpdateBlock = (block: Block, newContentState: ContentState) => {
-        debouncedOnUpdateBlock(block, newContentState);
     };
 
-    const onCreateNewBlock = (_title?: string) => {
-        const title = _title || new Date().toISOString();
-        const key = makeUniqueKey(title, state.blockOrder);
+    const onUpdateBlockContent = (block: Block, newContentState: ContentState) => {
+        onUpdateBlock(block, newContentState);
+    };
 
+    const onUpdateBlockTitle = (block: Block, newTitle: string) => {
+        onUpdateBlock(block, undefined, newTitle);
+    };
+
+    const onCreateNewBlock = (title: string) => {
         finalizeState((draft) => {
-            draft.blocks[key] = newBlock(key);
+            const key = makeUniqueKey(title, draft.blockOrder);
+            draft.blocks[key] = newBlock(key, title);
             draft.blockOrder = [key, ...draft.blockOrder];
         });
+        setFocusIdx(0);
     };
 
     const onDeleteBlock = (block: Block) => {
         finalizeState((draft) => {
             delete draft.blocks[block.key];
-            const index = draft.blockOrder.indexOf(block.key);
-            if (index > -1) {
-                draft.blockOrder.splice(index, 1);
-            }
+            draft.blockOrder.splice(draft.blockOrder.indexOf(block.key), 1);
         });
     };
 
-    const hasBlock = (key: string) => {
-        return state.blockOrder.indexOf(key) >= 0;
-    };
+    const hasBlock = (key: string) => state.blockOrder.indexOf(key) >= 0;
 
     const checkTodayBlock = () => {
         const today = moment().format('MMMM Do YYYY');
@@ -117,22 +133,49 @@ const App: React.FC = React.memo(() => {
 
     useInterval(checkTodayBlock, 1000);
 
-    useEffect(checkTodayBlock);
+    useEffect(checkTodayBlock, [state]);
+
+    const debouncedOnSerialize = debounce(200, false, () => {
+        const newHash = serialize(state);
+        if (window.history && window.history.pushState) {
+            window.history.pushState(
+                null,
+                state.blockOrder.length > 0 ? `${state.blocks[state.blockOrder[0]].title} — scratch` : `scratch`,
+                `#${newHash}`
+            );
+        } else {
+            window.location.hash = `#${newHash}`;
+        }
+    });
+
+    const onFocusThis = (idx: number) => () => setFocusIdx(idx);
+    const onFocusNext = (idx: number) => () => setFocusIdx((idx + 1) % state.blockOrder.length);
+    const onFocusPrevious = (idx: number) => () =>
+        setFocusIdx((idx - 1 + state.blockOrder.length) % state.blockOrder.length);
+
+    useEffect(debouncedOnSerialize, [state]);
+
+    useHotkeys('command+enter', () => onCreateNewBlock(randomEmoji()));
 
     return (
-        <div className="container">
+        <div className={cx('container')}>
             {state.blockOrder.map((key, i) => (
                 <BlockEditor
                     key={key}
                     block={state.blocks[key]}
-                    onUpdateBlock={onUpdateBlock}
-                    onDeleteBlock={onDeleteBlock}
+                    onUpdateBlockContent={onUpdateBlockContent}
+                    onUpdateBlockTitle={onUpdateBlockTitle}
                     onCreateNewBlock={onCreateNewBlock}
-                    shouldFocus={i === 0}
+                    onDeleteBlock={onDeleteBlock}
+                    onFocusNext={onFocusNext(i)}
+                    onFocusPrevious={onFocusPrevious(i)}
+                    onFocusThis={onFocusThis(i)}
+                    shouldFocus={i === focusIdx}
                 />
             ))}
+            <div className={cx('footer')}>{window.location.hash.length} chars</div>
         </div>
     );
-});
+};
 
 export default App;

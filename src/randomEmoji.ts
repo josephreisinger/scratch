@@ -53,40 +53,9 @@ function weightedSample(weights: number[]) {
     return weights.length - 1;
 }
 
-export const randomEmoji = (unicodeVersion: number = 6) => {
+export const randomEmoji = (unicodeVersion: number = UNICODE_VERSION) => {
     const codePlane = EMOJI_RANGES_UNICODE[unicodeVersion];
     const weights = codePlane.map(([start, end]) => end - start + 1);
     const [start, end] = codePlane[weightedSample(weights)];
     return String.fromCodePoint(Math.floor((start + Math.random() * (end - start + 1)) / 2) * 2);
 };
-
-/*
- *def random_emoji(unicode_version=UNICODE_VERSION):
- *    if unicode_version in EMOJI_RANGES_UNICODE:
- *        emoji_ranges = EMOJI_RANGES_UNICODE[unicode_version]
- *    else:
- *        emoji_ranges = EMOJI_RANGES_UNICODE[-1]
- *
- *    # Weighted distribution
- *    count = [ord(r[-1]) - ord(r[0]) + 1 for r in emoji_ranges]
- *    weight_distr = list(accumulate(count))
- *
- *    # Get one point in the multiple ranges
- *    point = randrange(weight_distr[-1])
- *
- *    # Select the correct range
- *    emoji_range_idx = bisect(weight_distr, point)
- *    emoji_range = emoji_ranges[emoji_range_idx]
- *
- *    # Calculate the index in the selected range
- *    point_in_range = point
- *    if emoji_range_idx != 0:
- *        point_in_range = point - weight_distr[emoji_range_idx - 1]
- *
- *    # Emoji 😄
- *    emoji = chr(ord(emoji_range[0]) + point_in_range)
- *    emoji_name = unicode_name(emoji, NO_NAME_ERROR).capitalize()
- *    emoji_codepoint = "U+{}".format(hex(ord(emoji))[2:].upper())
- *
- *    return emoji # (emoji, emoji_codepoint, emoji_name)
- */

@@ -5,3 +5,8 @@
     font-size: 12pt;
     color: #282c34;
 }
+
+.footer {
+    position: sticky;
+    bottom: 0;
+}

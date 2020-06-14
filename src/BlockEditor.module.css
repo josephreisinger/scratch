@@ -4,6 +4,7 @@
     width: 100%;
     display: grid;
     grid-template-columns: 100px 1fr;
+    grid-gap: 8px;
 }
 
 .meta {
@@ -12,15 +13,14 @@
 }
 
 .title {
-    text-transform: uppercase;
+    border: 1px solid #eee;
     margin-bottom: 8px;
-}
-.title:hover {
-    text-decoration: underline;
+    line-height: 20px;
+    height: 20px;
 }
 
 .timestamp {
-    color: red;
+    color: #333;
 }
 
 .delete {
@@ -35,6 +35,15 @@
     min-width: 800px;
     min-height: 128px;
 }
-.block:hover {
+
+.focused .title {
+    font-weight: 800;
+}
+
+.title:hover {
+    border: 1px solid black;
+}
+
+.focused .block {
     border: 1px solid black;
 }
